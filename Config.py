@@ -1,0 +1,22 @@
+import os
+from pathlib import Path
+
+# Paths
+BASE_DIR = Path(__file__).resolve().parent
+
+DATA_DIR = BASE_DIR / 'data_set'
+PROCESSED_DIR = BASE_DIR / 'processed_files'
+DATA_SET_PATH = BASE_DIR / 'data_set'
+STOCKS_PATH = DATA_SET_PATH / 'Stocks'
+DB_PATH = BASE_DIR / 'trading_metadata.db'
+LOGS_DIR = BASE_DIR / 'others'
+
+PROCESSED_MARKET_DATA = PROCESSED_DIR / "processed_market_data.parquet"
+DB_CONNECTION_STRING = f"sqlite:///{DB_PATH}"
+DEBUG_MODE = True
+
+# Load Data
+MIN_PRICE_EVER = 2.0
+MIN_MEDIAN_PRICE = 5.0
+MIN_DOLLAR_VOLUME = 1_000_000
+MIN_HISTORY_DAYS = 500

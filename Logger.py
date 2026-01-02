@@ -1,113 +1,99 @@
-import pandas as pd
 import argparse
-import os
+import pandas as pd
 import time
+import sys
+from datetime import datetime
 
-def stream_data(file_path, date_range="all", selected_columns=None, delay=0, max_rows=None):
-    if not os.path.exists(file_path):
-        print(f"❌ Plik nie istnieje: {file_path}")
+def stream_data(file_path, date_range, columns, delay, max_rows):
+    """
+    Reads a parquet file and streams it row by row with an optional delay.
+    """
+    try:
+        # Load data
+        df = pd.read_parquet(file_path)
+    except FileNotFoundError:
+        print(f"Error: File not found: {file_path}")
+        return
+    except Exception as e:
+        print(f"Error opening file: {e}")
         return
 
-    ext = os.path.splitext(file_path)[1].lower()
-    
-    try:
-        # 1. Odczyt pliku
-        if ext == '.parquet':
-            df = pd.read_parquet(file_path)
-        elif ext == '.csv':
-            df = pd.read_csv(file_path, parse_dates=['Date'])
-            if 'Date' in df.columns:
-                df.set_index('Date', inplace=True)
-        else:
+    # 1. Filter columns
+    if columns:
+        # Check if specified columns exist in the file
+        existing_cols = [c for c in columns if c in df.columns]
+        if not existing_cols:
+            print(f"Error: None of the specified columns {columns} exist in the file.")
+            print(f"Available columns: {df.columns.tolist()}")
             return
+        df = df[existing_cols]
 
-        if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index)
-        
-        df.sort_index(inplace=True)
-
-        # 2. Filtrowanie po dacie (teraz opcjonalne)
-        if date_range and date_range.lower() != 'all':
-            try:
-                if '-' in date_range:
-                    start_year, end_year = date_range.split('-')
-                    df = df.loc[start_year:end_year]
+    # 2. Filter date range (simple handling of "YYYY-YYYY" strings)
+    if date_range != "all":
+        try:
+            start_year, end_year = map(int, date_range.split('-'))
+            # Assume index is datetime. If not, adapt code.
+            if isinstance(df.index, pd.DatetimeIndex):
+                df = df[(df.index.year >= start_year) & (df.index.year <= end_year)]
+            else:
+                # If index is not date, try parsing if 'Date' column exists
+                if 'Date' in df.columns:
+                    df['Date'] = pd.to_datetime(df['Date'])
+                    mask = (df['Date'].dt.year >= start_year) & (df['Date'].dt.year <= end_year)
+                    df = df[mask]
                 else:
-                    df = df.loc[date_range]
-            except Exception as e:
-                print(f"⚠️  Nieprawidłowy zakres dat: {date_range}. Pokazuję całość.")
+                    print("Warning: Cannot filter by date (no DateTimeIndex or Date column).")
+        except ValueError:
+            print("Date format error. Use format YYYY-YYYY, e.g., 2006-2009")
 
-        # 3. Wybór kolumn i usuwanie NaN (tylko w nich)
-        show_index = False
-        if selected_columns:
-            if any(c.lower() == 'date' for c in selected_columns):
-                show_index = True
-                selected_columns = [c for c in selected_columns if c.lower() != 'date']
+    # 3. Limit number of rows
+    if max_rows is not None:
+        df = df.head(max_rows)
 
-            existing_cols = [c for c in selected_columns if c in df.columns]
-            
-            if existing_cols:
-                df = df[existing_cols]
-                df = df.dropna()
-            elif not show_index:
-                print("❌ Nie znaleziono wybranych kolumn.")
-                return
+    # 4. Stream display
+    print(f"\nStarting data streaming from: {file_path}")
+    print(f"Columns: {list(df.columns)}")
+    print("-" * 50)
 
-        # 4. Limit wierszy
-        if max_rows:
-            df = df.head(max_rows)
-
-        print(f"🚀 Plik: {os.path.basename(file_path)} | Zakres: {date_range} | Wierszy: {len(df)}")
-        print("-" * 50)
-
-        # 5. Szerokość kolumn
-        col_widths = {}
-        index_name = str(df.index.name) if df.index.name else "DATE"
-        sample_index_strings = df.index[:10].astype(str)
-        sample_index_width = sample_index_strings.map(len).max() if not sample_index_strings.empty else 10
-        col_widths['__index__'] = max(len(index_name), sample_index_width) + 2
-
-        sample_cols = df.head(10).astype(str)
-        for col in df.columns:
-            col_widths[col] = max(len(str(col)), sample_cols[col].map(len).max()) + 2
-
-        # 6. Nagłówek
-        header = ""
-        if show_index or True: # Zawsze rezerwujemy miejsce na datę dla porządku
-            idx_name = index_name.upper()
-            header += f"{idx_name:<{col_widths['__index__']}}"
-        header += "".join([f"{str(col).upper():<{col_widths[col]}}" for col in df.columns])
+    for index, row in df.iterrows():
+        # Nice row formatting
+        row_str = " | ".join([f"{str(val):<10}" for val in row.values])
+        print(f"{index}: {row_str}")
         
-        print(header)
-        print("-" * len(header))
-
-        # 7. Wypisywanie
-        for index, row in df.iterrows():
-            idx_val = str(index.date()) if hasattr(index, 'date') else str(index)
-            line = f"{idx_val:<{col_widths['__index__']}}"
-            line += "".join([f"{str(val):<{col_widths[col]}}" for col, val in row.items()])
-            print(line)
-            
-            if delay > 0:
-                time.sleep(delay)
-                
-        print("-" * len(header))
-        print("✅ Koniec danych.")
-
-    except Exception as e:
-        print(f"❌ Błąd: {e}")
+        if delay > 0:
+            time.sleep(delay)
 
 def main():
-    parser = argparse.ArgumentParser(description="Logger giełdowy.")
-    parser.add_argument("path", type=str, help="Ścieżka do pliku")
-    parser.add_argument("columns", nargs="*", help="Nazwy kolumn")
+    parser = argparse.ArgumentParser(description="Parquet logger")
     
-    # Przenosimy date_range do flagi --range, domyślnie ustawionej na 'all'
-    parser.add_argument("--range", type=str, default="all", help="Zakres dat, np. 2006-2009")
-    parser.add_argument("--delay", type=float, default=0)
-    parser.add_argument("--rows", type=int, default=None)
+    parser.add_argument("path", type=str, help="File path")
+    
+    # --- NEW FLAG: Display columns only ---
+    parser.add_argument("--cols", action="store_true", help="Display column names only and exit")
+    
+    parser.add_argument("columns", nargs="*", help="Specific columns to display")
+    parser.add_argument("--range", type=str, default="all", help="Data range, ex. 2006-2009")
+    parser.add_argument("--delay", type=float, default=0, help="Delay in seconds between rows")
+    parser.add_argument("--rows", type=int, default=None, help="Limit number of rows")
     
     args = parser.parse_args()
+
+    # Logic for --cols flag
+    if args.cols:
+        try:
+            # Read headers only for speed
+            df = pd.read_parquet(args.path)
+            print(f"\nColumns in file {args.path}:")
+            print("=" * 30)
+            for i, col in enumerate(df.columns):
+                print(f"{i+1}. {col}")
+            print("=" * 30)
+            return # Exit, do not start streaming
+        except Exception as e:
+            print(f"Error reading file: {e}")
+            return
+
+    # Normal execution
     stream_data(args.path, args.range, args.columns, args.delay, args.rows)
 
 if __name__ == "__main__":
