@@ -98,7 +98,6 @@ if __name__ == "__main__":
             std_dev = prices_df[col].std()
             avg_vol = 0
             
-            # Klasyfikacja zmienności (High/Medium/Low)
             if std_dev > prices_df[col].mean() * 0.05: vol_class = "HIGH"
             elif std_dev > prices_df[col].mean() * 0.02: vol_class = "MEDIUM"
             else: vol_class = "LOW"
@@ -111,8 +110,7 @@ if __name__ == "__main__":
             
         df_meta = pd.DataFrame(meta_data)
         
-        # 3. Zapis metadanych do SQL
         db.save_tickers_metadata(df_meta)
         
     else:
-        print("\n❌ Brak danych.")
+        print("\n No data.")

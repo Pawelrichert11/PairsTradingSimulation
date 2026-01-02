@@ -3,7 +3,8 @@ import pandas as pd
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "trading_metadata.db" # Nowa nazwa bazy, lekka
+PROCESSED_DIR = BASE_DIR / "processed_files"
+DB_PATH = PROCESSED_DIR / "trading_metadata.db" # Nowa nazwa bazy, lekka
 
 class DatabaseManager:
     def __init__(self):
