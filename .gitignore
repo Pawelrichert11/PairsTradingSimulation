@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+
+tempCodeRunnerFile.py
+
+*.db
+*.sqlite3
+trading_metadata.db
+
+data_set/
+processed_files/
+
+*.log
+.DS_Store
+
+others/
