@@ -1,90 +1,61 @@
-import sqlite3
 import pandas as pd
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent
-PROCESSED_DIR = BASE_DIR / "processed_files"
-DB_PATH = PROCESSED_DIR / "trading_metadata.db" # Nowa nazwa bazy, lekka
+from sqlalchemy import create_engine, text
+import Config
 
 class DatabaseManager:
+    """
+    Manages SQLite database interactions using SQLAlchemy.
+    """
     def __init__(self):
-        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        self._prepare_db()
+        """
+        Initializes the database engine using the connection string from Config.
+        """
+        try:
+            self.engine = create_engine(Config.DB_CONNECTION_STRING)
+            print(f"Database connected: {Config.DB_PATH}")
+        except Exception as e:
+            print(f"Error connecting to database: {e}")
+            self.engine = None
 
-    def _prepare_db(self):
-        # Tabela 1: Metadane o spółkach (Sektor, Ryzyko itp.)
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS tickers_info (
-                ticker TEXT PRIMARY KEY,
-                volatility_class TEXT,
-                avg_volume REAL
-            )
-        """)
-        
-        # Tabela 2: Wyniki symulacji
-        self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS simulation_results (
-                ticker_a TEXT,
-                ticker_b TEXT,
-                wynik_netto REAL,
-                liczba_transakcji INTEGER,
-                korelacja REAL,
-                FOREIGN KEY(ticker_a) REFERENCES tickers_info(ticker)
-            )
-        """)
-        self.conn.commit()
+    def save_tickers_metadata(self, df):
+        """
+        Saves ticker metadata (volatility class, average volume) to the database.
+        Replaces the table if it exists.
+        """
+        if self.engine is None or df.empty:
+            return
 
-    # --- 1. STORE DATA (Zapisywanie metadanych) ---
-    def save_tickers_metadata(self, df_metadata):
-        """Zapisuje informacje o spółkach (nie ceny!)."""
-        df_metadata.to_sql('tickers_info', self.conn, if_exists='replace', index=False)
-        print("✅ Zapisano metadane spółek do SQL.")
+        try:
+            table_name = 'tickers_metadata'
+            df.to_sql(table_name, self.engine, if_exists='replace', index=False)
+            print(f"Saved {len(df)} rows to table '{table_name}'.")
+        except Exception as e:
+            print(f"Error saving metadata: {e}")
 
-    def get_all_simulation_results_sorted(self):
-            """Pobiera wszystkie wyniki symulacji posortowane malejąco po wyniku netto."""
-            query = """
-                SELECT ticker_a, ticker_b, wynik_netto, liczba_transakcji, korelacja 
-                FROM simulation_results 
-                ORDER BY wynik_netto DESC
-            """
-            return pd.read_sql(query, self.conn)
-    
-    def save_simulation_results(self, df_results):
-        df_results.to_sql('simulation_results', self.conn, if_exists='replace', index=False)
-        print("✅ Zapisano wyniki symulacji do SQL.")
+    def get_tickers_metadata(self):
+        """
+        Retrieves ticker metadata from the database.
+        """
+        if self.engine is None:
+            return pd.DataFrame()
 
-    # --- 2. JOIN & FILTER (Demonstracja wymogów) ---
-    def get_joined_results(self, min_trades=5):
-        """
-        DEMONSTRACJA JOIN: Łączy wyniki symulacji z informacją o zmienności spółki A.
-        """
-        query = f"""
-            SELECT 
-                r.ticker_a, 
-                r.ticker_b, 
-                r.wynik_netto, 
-                r.liczba_transakcji,
-                t.volatility_class -- Kolumna z drugiej tabeli
-            FROM simulation_results r
-            JOIN tickers_info t ON r.ticker_a = t.ticker
-            WHERE r.liczba_transakcji >= {min_trades}
-            ORDER BY r.wynik_netto DESC
-        """
-        return pd.read_sql(query, self.conn)
+        try:
+            query = "SELECT * FROM tickers_metadata"
+            return pd.read_sql(query, self.engine)
+        except Exception as e:
+            print(f"Error reading metadata: {e}")
+            return pd.DataFrame()
 
-    # --- 3. AGGREGATION (Demonstracja Group By) ---
-    def get_stats_by_volatility(self):
+    def execute_query(self, query):
         """
-        DEMONSTRACJA AGGREGATION: Średni wynik strategii w zależności od klasy zmienności.
+        Executes a raw SQL query (for debugging or advanced usage).
         """
-        query = """
-            SELECT 
-                t.volatility_class, 
-                COUNT(*) as count_pairs,
-                AVG(r.wynik_netto) as avg_return,
-                MAX(r.wynik_netto) as max_return
-            FROM simulation_results r
-            JOIN tickers_info t ON r.ticker_a = t.ticker
-            GROUP BY t.volatility_class
-        """
-        return pd.read_sql(query, self.conn)
+        if self.engine is None:
+            return
+
+        try:
+            with self.engine.connect() as connection:
+                result = connection.execute(text(query))
+                return result
+        except Exception as e:
+            print(f"Error executing query: {e}")

@@ -1,111 +1,57 @@
+import pandas as pd
 import numpy as np
-from numba import jit
+import Config
 
-@jit(nopython=True)
-def fast_sim_logic(spread, window, entry_z, exit_z):
-    """Błyskawiczna pętla w Numbie - zero overheadu Pythona"""
-    n = len(spread)
-    positions = np.zeros(n)
-    current_pos = 0
-    
-    # Pre-kalkulacja z-score w pętli
-    for i in range(window, n):
-        sub = spread[i-window:i]
-        mu = np.mean(sub)
-        std = np.std(sub)
+class PairTradingStrategy:
+    def __init__(self, ticker1, ticker2, data):
+        self.ticker1 = ticker1
+        self.ticker2 = ticker2
+
+        self.df = data[[ticker1, ticker2]].copy()
         
-        if std > 0:
-            z = (spread[i] - mu) / std
-            if current_pos == 0:
-                if z < -entry_z: current_pos = 1
-                elif z > entry_z: current_pos = -1
-            elif current_pos == 1:
-                if z > -exit_z: current_pos = 0
-            elif current_pos == -1:
-                if z < exit_z: current_pos = 0
-        positions[i] = current_pos
-    return positions
-
-def run_pairs_trading_sim_fast(prices_a, prices_b, window, entry_z, exit_z, commission):
-    # 1. FILTROWANIE NaN: Znajdujemy wiersze, gdzie obie spółki mają dane
-    # mask to tablica True/False - True tylko tam, gdzie obie ceny są liczbami
-    mask = ~np.isnan(prices_a) & ~np.isnan(prices_b)
-    
-    clean_a = prices_a[mask]
-    clean_b = prices_b[mask]
-
-    # 2. SPRAWDZENIE DŁUGOŚCI: Jeśli po usunięciu NaN zostało za mało danych, pomijamy parę
-    if len(clean_a) < window + 10:
-        return None
-
-    # 3. OBLICZENIA na "czystych" danych
-    spread = np.log(clean_a) - np.log(clean_b)
-    
-    # Obliczamy pozycje
-    pos_raw = fast_sim_logic(spread, window, entry_z, exit_z)
-    
-    # Shift o 1 (wejście na następnej sesji po sygnale)
-    pos = np.zeros_like(pos_raw)
-    pos[1:] = pos_raw[:-1]
-    
-    # Koszty i zwroty
-    # diff_pos wyłapuje każdą zmianę pozycji (prowizja przy wejściu i wyjściu)
-    diff_pos = np.abs(np.diff(pos, prepend=0))
-    
-    # Log-return: pozycja * zmiana spreadu
-    spread_diff = np.diff(spread, prepend=spread[0])
-    returns = pos * spread_diff
-    
-    # Prowizja logarytmiczna: ln(1 - commission)
-    # Dodajemy, bo logarytm z liczby < 1 jest ujemny
-    log_comm = np.log(1 - commission)
-    net_returns = returns + (diff_pos * log_comm)
-    
-    total_trades = np.sum(diff_pos)
-    
-    # Jeśli system ani razu nie wszedł w pozycję, zwracamy None
-    if total_trades == 0:
-        return None
+        self.window_size = Config.WINDOW_SIZE
+        self.std_dev_entry = Config.STD_DEV_ENTRY
+        self.std_dev_exit = Config.STD_DEV_EXIT
+        self.stop_loss = Config.STOP_LOSS_PCT
         
-    # Sumujemy logarytmiczne stopy zwrotu i zamieniamy na wynik procentowy
-    final_return = np.exp(np.sum(net_returns)) - 1
-    
-    return final_return, int(total_trades)
+        self.results = {}
 
-def run_full_simulation(df, ticker_a, ticker_b, window, entry_z, exit_z, commission):
-    # Pobranie czystych danych dla pary
-    if ticker_a not in df.columns or ticker_b not in df.columns:
-        return None
+    def calculate_signals(self):
+        self.df['ratio'] = self.df[self.ticker1] / self.df[self.ticker2]
+        self.df['mean'] = self.df['ratio'].rolling(window=self.window_size).mean()
+        self.df['std'] = self.df['ratio'].rolling(window=self.window_size).std()
+        self.df['z_score'] = (self.df['ratio'] - self.df['mean']) / self.df['std']
+        self.df['signal'] = 0 
+
+        # 0 = No position, 1 = Long Ratio (Buy T1, Sell T2), -1 = Short Ratio (Sell T1, Buy T2)
+        self.df.loc[self.df['z_score'] < -self.std_dev_entry, 'signal'] = 1
+        self.df.loc[self.df['z_score'] > self.std_dev_entry, 'signal'] = -1
+        self.df.loc[abs(self.df['z_score']) < self.std_dev_exit, 'signal'] = 0
         
-    pair_data = df[[ticker_a, ticker_b]].dropna().copy()
-    if len(pair_data) < window + 10:
-        return None
-
-    prices_a = pair_data[ticker_a].values
-    prices_b = pair_data[ticker_b].values
-    
-    # Obliczenia spreadu (logarytmiczne)
-    spread = np.log(prices_a) - np.log(prices_b)
-    
-    # Obliczamy pozycje za pomocą Numby
-    pos_raw = fast_sim_logic(spread, window, entry_z, exit_z)
-    
-    # Shift o 1 (wejście na następnej sesji po sygnale)
-    pos = np.zeros_like(pos_raw)
-    pos[1:] = pos_raw[:-1]
-    
-    # Koszty i zwroty
-    spread_diff = np.diff(spread, prepend=spread[0])
-    diff_pos = np.abs(np.diff(pos, prepend=0))
-    
-    log_returns = pos * spread_diff
-    log_costs = diff_pos * np.log(1 - commission)
-    
-    # Zapisanie wyników do DataFrame (potrzebne do wykresów)
-    pair_data['Strategy_Log_Ret'] = log_returns + log_costs
-    pair_data['Cumulative_Return_Net'] = np.exp(pair_data['Strategy_Log_Ret'].cumsum())
-    pair_data['Trades_Made'] = diff_pos
-    pair_data['Position'] = pos  # <--- DODAJ TĘ LINIĘ
-    pair_data['Transaction_Costs_Value'] = diff_pos * commission
-    
-    return pair_data
+        # Forward fill signals to hold positions until an exit signal is generated
+        self.df['signal'] = self.df['signal'].replace(0, np.nan).ffill().fillna(0)
+        
+    def run_backtest(self):
+        self.calculate_signals()
+        
+        t1_ret = self.df[self.ticker1].pct_change()
+        t2_ret = self.df[self.ticker2].pct_change()
+        
+        # If Signal 1 (Long Ratio): Buy T1, Sell T2
+        # If Signal -1 (Short Ratio): Sell T1, Buy T2
+        self.df['strategy_return'] = self.df['signal'].shift(1) * (t1_ret - t2_ret)
+        
+        # Cumulative returns
+        self.df['cum_return'] = (1 + self.df['strategy_return']).cumprod()
+        
+        total_return = self.df['cum_return'].iloc[-1] - 1
+        sharpe_ratio = self.df['strategy_return'].mean() / self.df['strategy_return'].std() * np.sqrt(252)
+        
+        self.results = {
+            'pair': f"{self.ticker1}-{self.ticker2}",
+            'total_return': total_return,
+            'sharpe_ratio': sharpe_ratio,
+            'final_value': self.df['cum_return'].iloc[-1]
+        }
+        
+        return self.results

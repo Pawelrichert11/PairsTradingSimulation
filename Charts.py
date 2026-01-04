@@ -1,117 +1,136 @@
-import pandas as pd
 import matplotlib.pyplot as plt
-import os
-import sys
-from pathlib import Path
-from Simulation import run_full_simulation
+import pandas as pd
+import argparse
+import Config
+from Simulation import PairTradingStrategy
 
-BASE_DIR = Path(__file__).resolve().parent
-PROCESSED_DIR = BASE_DIR / "processed_files"
-DATA_SOURCE = PROCESSED_DIR / "processed_market_data.parquet"
+# Set visual style
+plt.style.use('seaborn-v0_8-darkgrid')
 
-TICKER_A = 'APA.US'
-TICKER_B = 'APC.US'
-COMMISSION = 0.001
-WINDOW = 20
-ENTRY_Z = 2.0
-EXIT_Z = 0.5
-
-def export_trade_history(results, ticker_a, ticker_b, filename='trade_history.csv'):
-    """Generuje i zapisuje historię transakcji do folderu processed_files."""
-    trades = results[results['Trades_Made'] > 0].copy()
+def plot_analysis(strategy_df, ticker1, ticker2):
+    """
+    Generates a 2-row plot:
+    1. Strategy Cumulative Return
+    2. Asset Price Comparison
     
-    if trades.empty:
-        print("Brak transakcji do zapisania.")
+    Automatically filters the view to the period where both stocks have data.
+    """
+    
+    # --- FIX: Filter data to overlapping period only ---
+    # We drop rows where either ticker1 or ticker2 has NaN values.
+    df = strategy_df.dropna(subset=[ticker1, ticker2]).copy()
+
+    if df.empty:
+        print("Error: No overlapping data range found for these two stocks.")
         return
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+
+    # --- PLOT 1: Strategy Performance (Cumulative Return) ---
+    # We plot the 'cum_return' calculated in Simulation.py
+    # Re-normalize cum_return to start at 1.0 for the visible period for better readability
+    if not df['cum_return'].empty:
+        # Optional: Normalize the start of the visible chart to 1.0
+        # df['cum_return'] = df['cum_return'] / df['cum_return'].iloc[0]
+        pass
+
+    ax1.plot(df.index, df['cum_return'], color='green', linewidth=2, label='Strategy Equity Curve')
     
-    # Mapowanie operacji
-    def identify_operation(pos):
-        if pos == 1: return f"LONG {ticker_a} / SHORT {ticker_b}"
-        if pos == -1: return f"SHORT {ticker_a} / LONG {ticker_b}"
-        return "EXIT POSITION"
-
-    history = pd.DataFrame(index=trades.index)
-    history['Nr_Transakcji'] = range(1, len(trades) + 1)
-    history['Cena_' + ticker_a] = trades[ticker_a].round(4)
-    history['Cena_' + ticker_b] = trades[ticker_b].round(4)
-    history['Operacja'] = trades['Position'].apply(identify_operation)
-    history['Saldo_Kumulatywne'] = trades['Cumulative_Return_Net'].round(4)
-    history['Zmiana_Saldo_%'] = trades['Cumulative_Return_Net'].pct_change().round(4) * 100
-
-    # Pełna ścieżka do pliku
-    output_path = PROCESSED_DIR / filename
-    history.to_csv(output_path)
-    print(f"✅ Zapisano historię transakcji do: {output_path}")
-
-def get_performance_metrics(results, ticker_a, ticker_b):
-    rets_a = results[ticker_a].pct_change()
-    rets_b = results[ticker_b].pct_change()
-    market_returns = (rets_a + rets_b) / 2
+    # Draw a baseline at 1.0 (starting value)
+    ax1.axhline(1.0, color='black', linestyle='--', linewidth=1, alpha=0.5)
     
-    cum_ret_net = results['Cumulative_Return_Net']
-    running_max = cum_ret_net.cummax()
-    drawdown = (cum_ret_net - running_max) / running_max
-    market_cum = (1 + market_returns).fillna(0).cumprod()
+    ax1.set_title(f"Strategy Performance: {ticker1} - {ticker2} Pair", fontsize=14)
+    ax1.set_ylabel("Cumulative Return (Growth of $1)", fontsize=12)
+    ax1.legend(loc="upper left")
+    ax1.grid(True)
 
-    metrics = {
-        "Total Return NET (%)": (cum_ret_net.iloc[-1] - 1) * 100,
-        "Total Return Market (%)": (market_cum.iloc[-1] - 1) * 100,
-        "Max Drawdown NET (%)": drawdown.min() * 100,
-        "Total Transactions": results['Trades_Made'].sum(),
-        "Total Costs Paid (%)": (results['Transaction_Costs_Value'].sum()) * 100
-    }
-    return metrics, drawdown, market_cum
+    # --- PLOT 2: Price Comparison (Dual Axis) ---
+    # Primary Y-Axis (Left) for Ticker 1
+    color1 = 'tab:blue'
+    ax2.set_xlabel('Date', fontsize=12)
+    ax2.set_ylabel(f'Price {ticker1}', color=color1, fontsize=12)
+    ax2.plot(df.index, df[ticker1], color=color1, label=ticker1)
+    ax2.tick_params(axis='y', labelcolor=color1)
+    ax2.grid(True)
+
+    # Secondary Y-Axis (Right) for Ticker 2
+    # We use twinx() to share the same X-axis but have a different Y scale
+    ax3 = ax2.twinx()  
+    color2 = 'tab:orange'
+    ax3.set_ylabel(f'Price {ticker2}', color=color2, fontsize=12)
+    ax3.plot(df.index, df[ticker2], color=color2, label=ticker2)
+    ax3.tick_params(axis='y', labelcolor=color2)
+    
+    # Fix the grid for the secondary axis to avoid clutter
+    ax3.grid(False)
+
+    ax2.set_title(f"Price History: {ticker1} vs {ticker2}", fontsize=14)
+
+    # Combine legends from both axes
+    lines_1, labels_1 = ax2.get_legend_handles_labels()
+    lines_2, labels_2 = ax3.get_legend_handles_labels()
+    ax2.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper left")
+
+    plt.tight_layout()
+    plt.show()
+
+def main():
+    # Setup command line argument parsing
+    parser = argparse.ArgumentParser(description="Generate Strategy & Price Charts")
+    parser.add_argument("tickers", nargs="*", type=str, help="Two tickers to analyze (e.g. AAPL MSFT)")
+    args = parser.parse_args()
+    
+    print("Loading market data...")
+    
+    try:
+        # Load data
+        if not Config.PROCESSED_MARKET_DATA.exists():
+            print(f"Error: File {Config.PROCESSED_MARKET_DATA} not found.")
+            print("Please run LoadData.py first.")
+            return
+            
+        market_data = pd.read_parquet(Config.PROCESSED_MARKET_DATA)
+        
+        # Prepare tickers
+        user_tickers = [t.upper() for t in args.tickers]
+        
+        # We need exactly 2 tickers for this view
+        if len(user_tickers) != 2:
+            print("Error: You must provide exactly 2 tickers to run the strategy simulation.")
+            print("Example: python Charts.py KO PEP")
+            
+            # Fallback for testing if no arguments provided
+            if len(market_data.columns) >= 2:
+                print(f"\nDefaulting to first two available tickers: {market_data.columns[0]}, {market_data.columns[1]}")
+                user_tickers = [market_data.columns[0], market_data.columns[1]]
+            else:
+                return
+
+        t1, t2 = user_tickers
+
+        # Validate existence
+        if t1 not in market_data.columns or t2 not in market_data.columns:
+            print(f"Error: One or both tickers ({t1}, {t2}) not found in the dataset.")
+            return
+
+        print(f"Running simulation for {t1} and {t2}...")
+
+        # Initialize and run the strategy using the Simulation class
+        strategy = PairTradingStrategy(t1, t2, market_data)
+        results = strategy.run_backtest()
+
+        if results is None:
+            print("Error: Not enough data to run simulation.")
+            return
+
+        print(f"Total Return: {results['total_return']:.2%}")
+        print(f"Sharpe Ratio: {results['sharpe_ratio']:.2f}")
+
+        # Plot the results
+        plot_analysis(strategy.df, t1, t2)
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    if os.path.exists(DATA_SOURCE):
-        all_data = pd.read_parquet(DATA_SOURCE)
-        
-        # Walidacja tickerów
-        missing_tickers = [t for t in [TICKER_A, TICKER_B] if t not in all_data.columns]
-        if missing_tickers:
-            print(f"❌ BŁĄD: Brakuje tickerów: {missing_tickers}")
-            sys.exit()
-
-        print(f"🚀 Uruchamiam symulację dla {TICKER_A} i {TICKER_B}...")
-        results = run_full_simulation(all_data, TICKER_A, TICKER_B, WINDOW, ENTRY_Z, EXIT_Z, COMMISSION)
-        
-        if results is not None:
-            export_trade_history(results, TICKER_A, TICKER_B)
-            metrics, drawdown_series, market_cum = get_performance_metrics(results, TICKER_A, TICKER_B)
-
-            print(f"\n--- STATYSTYKI PARY ({TICKER_A}/{TICKER_B}) ---")
-            for key, value in metrics.items():
-                print(f"{key:<25}: {value:.2f}")
-
-            # --- GENEROWANIE WYKRESU ---
-            plt.figure(figsize=(14, 12))
-            
-            # Subplot 1: Wynik Strategii (Equity Curve)
-            plt.subplot(2, 1, 1)
-            plt.plot(results.index, results['Cumulative_Return_Net'], label='STRATEGIA (NETTO)', color='blue', lw=3)
-            plt.plot(results.index, market_cum, label='Benchmark Rynek 50/50', color='black', ls='--')
-            plt.title(f'Wynik inwestycji: {TICKER_A} vs {TICKER_B}', fontsize=14)
-            plt.ylabel('Skumulowany Zwrot (1.0 = Start)')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
-
-            # Subplot 2: Znormalizowane wykresy cenowe spółek (Nałożone na siebie)
-            plt.subplot(2, 1, 2)
-            # Normalizujemy ceny (dzielimy przez pierwszą wartość), aby oba zaczynały od 1.0
-            norm_a = results[TICKER_A] / results[TICKER_A].iloc[0]
-            norm_b = results[TICKER_B] / results[TICKER_B].iloc[0]
-            
-            plt.plot(results.index, norm_a, label=f'Cena (norm): {TICKER_A}', color='green', lw=1.5, alpha=0.8)
-            plt.plot(results.index, norm_b, label=f'Cena (norm): {TICKER_B}', color='red', lw=1.5, alpha=0.8)
-            
-            plt.title(f'Porównanie zachowania cen (znormalizowane)', fontsize=12)
-            plt.ylabel('Względna zmiana ceny')
-            plt.legend()
-            plt.grid(True, alpha=0.3)
-
-            plt.tight_layout()
-            plt.show()
-        else:
-            print("⚠️ Symulacja nie zwróciła danych.")
-    else:
-        print(f"❌ Brak pliku danych: {DATA_SOURCE}")
+    main()

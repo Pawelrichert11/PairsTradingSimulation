@@ -32,7 +32,8 @@ def stream_data(file_path, date_range, columns, delay, max_rows):
     if date_range != "all":
         try:
             start_year, end_year = map(int, date_range.split('-'))
-            # Assume index is datetime. If not, adapt code.
+            
+            # Check if index is a datetime index
             if isinstance(df.index, pd.DatetimeIndex):
                 df = df[(df.index.year >= start_year) & (df.index.year <= end_year)]
             else:
@@ -56,7 +57,7 @@ def stream_data(file_path, date_range, columns, delay, max_rows):
     print("-" * 50)
 
     for index, row in df.iterrows():
-        # Nice row formatting
+        # Format row values for better readability
         row_str = " | ".join([f"{str(val):<10}" for val in row.values])
         print(f"{index}: {row_str}")
         
@@ -68,7 +69,7 @@ def main():
     
     parser.add_argument("path", type=str, help="File path")
     
-    # --- NEW FLAG: Display columns only ---
+    # Flag to display column names only
     parser.add_argument("--cols", action="store_true", help="Display column names only and exit")
     
     parser.add_argument("columns", nargs="*", help="Specific columns to display")
@@ -81,7 +82,7 @@ def main():
     # Logic for --cols flag
     if args.cols:
         try:
-            # Read headers only for speed
+            # Read only headers for performance
             df = pd.read_parquet(args.path)
             print(f"\nColumns in file {args.path}:")
             print("=" * 30)
