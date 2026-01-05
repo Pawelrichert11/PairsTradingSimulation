@@ -10,20 +10,14 @@ from Simulation import PairTradingStrategy
 st.set_page_config(layout="wide", page_title="Pairs Trading Dashboard")
 
 def load_simulation_results():
-    """
-    Wczytuje wyniki z pliku PARQUET wygenerowanego przez nową wersję multisimulation.py
-    """
-    # ZMIANA: Szukamy pliku .parquet zamiast .csv
     file_path = Config.PROCESSED_DIR / "simulation_results.parquet"
     
     if file_path.exists():
-        # ZMIANA: Używamy read_parquet
         df = pd.read_parquet(file_path)
         
         if 'coint_pvalue' not in df.columns:
             df['coint_pvalue'] = 1.0 
         
-        # Wymuszenie typów numerycznych (dla bezpieczeństwa, choć parquet trzyma typy lepiej niż csv)
         cols_to_numeric = ['sharpe_ratio', 'total_return', 'coint_pvalue', 'annualized_return', 'correlation', 'final_value']
         for col in cols_to_numeric:
             if col in df.columns:
@@ -40,49 +34,13 @@ def load_market_data():
         return pd.read_parquet(Config.PROCESSED_MARKET_DATA)
     return pd.DataFrame()
 
-@st.cache_data
-def ensure_correlation_data(results_df, market_data):
-    # Jeśli korelacja już jest w pliku (a w parquet powinna być), zwracamy od razu
-    if 'correlation' in results_df.columns and results_df['correlation'].notna().any():
-        return results_df
-
-    # Fallback: Obliczanie korelacji jeśli jej nie ma
-    corrs = []
-    for i, row in results_df.iterrows():
-        try:
-            if 'ticker_1' in row and 'ticker_2' in row:
-                t1, t2 = row['ticker_1'], row['ticker_2']
-            else:
-                parts = row['pair'].split('-')
-                t1, t2 = parts[0], parts[1]
-            
-            if t1 in market_data.columns and t2 in market_data.columns:
-                c = market_data[t1].corr(market_data[t2])
-            else:
-                c = 0.0
-            corrs.append(c)
-        except:
-            corrs.append(0.0)
-    results_df['correlation'] = corrs
-    return results_df
-
 # ---------------------------------------------------------
 # FUNKCJE RYSOWANIA
 # ---------------------------------------------------------
 def plot_pair_analysis(strategy):
-    # 1. Tworzymy kopię danych
     df = strategy.df.copy()
     
-    # --- PRZYCINANIE PUSTYCH DANYCH ---
-    # Usuwamy wiersze, gdzie ceny tickerów są puste (NaN).
-    # To sprawi, że wykres zacznie się dokładnie tam, gdzie zaczynają się dane cenowe.
     df = df.dropna(subset=[strategy.ticker1, strategy.ticker2])
-    # ----------------------------------------
-
-    # Wyliczamy equity curve jeśli jej nie ma (dla bezpieczeństwa)
-    perf_col = 'cum_return'
-    if perf_col not in df.columns and 'strategy_return' in df.columns:
-        df['cum_return'] = (1 + df['strategy_return'].fillna(0)).cumprod()
     
     window = strategy.window_size if hasattr(strategy, 'window_size') else 60
     
@@ -107,7 +65,7 @@ def plot_pair_analysis(strategy):
     fig.add_trace(go.Scatter(x=df.index, y=df[strategy.ticker1], name=strategy.ticker1, line=dict(color='blue', width=1), opacity=0.5), row=1, col=1, secondary_y=False)
     fig.add_trace(go.Scatter(x=df.index, y=df[strategy.ticker2], name=strategy.ticker2, line=dict(color='orange', width=1), opacity=0.5), row=1, col=1, secondary_y=False)
     
-    # Dodajemy Equity Curve
+    perf_col = 'cum_return'
     if perf_col in df.columns:
         fig.add_trace(go.Scatter(x=df.index, y=df[perf_col], name='Equity', line=dict(color='purple', width=3)), row=1, col=1, secondary_y=True)
 
@@ -193,9 +151,6 @@ def render_interactive_chart(df, x_col, y_col, title, key_suffix, log_x=False):
          
     st.plotly_chart(fig, use_container_width=True, key=f"chart_{key_suffix}")
 
-# ---------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------
 def main():
     st.title("Pairs Trading Simulation Dashboard")
     st.sidebar.header("Configuration")
@@ -208,9 +163,6 @@ def main():
     if results_df.empty:
         st.error("Brak pliku 'simulation_results.parquet'. Uruchom najpierw 'multisimulation.py'.")
         return
-    
-    # 2. Upewnienie się, że mamy korelację
-    results_df = ensure_correlation_data(results_df, market_data)
 
     # 3. Wybór głównej metryki
     profit_col = 'annualized_return' if 'annualized_return' in results_df.columns else 'total_return'

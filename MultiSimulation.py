@@ -49,7 +49,8 @@ def run_all_simulations():
             'coint_pvalue', 
             'correlation',
             'transaction_cost_used',
-            'final_value'
+            'final_value',
+            'cum_return'
         ]
 
         cols_to_use = [col for col in desired_order if col in results_df.columns]

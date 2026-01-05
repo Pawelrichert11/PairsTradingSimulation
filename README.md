@@ -35,7 +35,7 @@ RUNNING:
 2. Run MultiSimulation.py with a certain number of tickers set in Config
 
 3. Run the Dashboard (visualization):
-streamlit run Dashboard.py
+- streamlit run Dashboard.py
 
 FILE AND DIRECTOR STRUCTURE
 
@@ -44,28 +44,23 @@ The main entry point for the user interface. Used to visualize
 the strategy's results and control simulation parameters.
 
 2. Simulation.py
-The main logic module. Contains algorithms for calculating the spread, entry/exit signals,
-and financial results (P&L) for the strategy.
+The main logic module. Contains algorithms for calculating the pairs trading strategy
 
-3. MultiSimulationOneProcess.py
-A script enabling the serial running of multiple simulations within a single
-process (e.g., optimizing parameters for multiple pairs).
+3. MultiSimulation.py
+A script enabling the serial running of multiple simulations
 
 4. LoadData.py
-A module responsible for downloading market data (e.g., from a financial API)
-and pre-cleaning it.
+A module responsible for loading and joining the market data
 
 5. DatabaseManager.py
-Data access layer. Manages saving and loading historical data
-and simulation results from the database.
+Data access layer. Manages saving and loading meta-data from the database.
 
 6. Config.py
 Configuration file. Strategy parameters, file paths,
 and connection settings are defined here.
 
 7. Charts.py
-Module generating charts (prices, spread, z-score, equity curve)
-for analysis and dashboard purposes.
+Module generating charts for analysis (used for development purposes).
 
 8. Logger.py
-Supports logging system events and errors.
+Allows to print parquet files.
