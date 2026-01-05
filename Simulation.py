@@ -8,7 +8,6 @@ class PairTradingStrategy:
         self.ticker1 = ticker1
         self.ticker2 = ticker2
         
-        # Create a copy to avoid SettingWithCopy warnings on the original dataset
         self.df = data[[ticker1, ticker2]].copy()
         
         self.window_size = Config.WINDOW_SIZE
@@ -19,59 +18,38 @@ class PairTradingStrategy:
         self.results = {}
 
     def check_cointegration(self):
-        """
-        Calculates the p-value of the cointegration test (Engle-Granger) for the entire history.
-        """
         try:
-            # Remove NaNs to prevent test failure
             clean_data = self.df.dropna()
             
-            # Require minimum data (e.g., 30 days) for the test to be valid
-            if len(clean_data) < 30:
+            if len(clean_data) < Config.MIN_HISTORY_DAYS:
                 return 1.0
                 
             s1 = clean_data[self.ticker1]
             s2 = clean_data[self.ticker2]
             
-            # Engle-Granger Test. Returns: (t-stat, p-value, crit_values)
-            # We take index [1] which is the p-value
             score, p_value, _ = ts.coint(s1, s2)
             return p_value
             
         except Exception as e:
-            # Return 1.0 (no cointegration) in case of error
             return 1.0
 
     def calculate_signals(self):
-        # Calculate price ratio
         self.df['ratio'] = self.df[self.ticker1] / self.df[self.ticker2]
         
-        # Rolling Mean and Std Dev
         self.df['mean'] = self.df['ratio'].rolling(window=self.window_size).mean()
         self.df['std'] = self.df['ratio'].rolling(window=self.window_size).std()
-        
-        # Calculate Z-Score
         self.df['z_score'] = (self.df['ratio'] - self.df['mean']) / self.df['std']
         
-        # Initialize signal column
         self.df['signal'] = 0 
         
-        # Generate Signals
-        # Short the spread
         self.df.loc[self.df['z_score'] < -self.std_dev_entry, 'signal'] = 1
-        # Long the spread
         self.df.loc[self.df['z_score'] > self.std_dev_entry, 'signal'] = -1
-        # Exit positions
         self.df.loc[abs(self.df['z_score']) < self.std_dev_exit, 'signal'] = 0
         
-        # Fill signals forward (hold position until exit signal)
         self.df['signal'] = self.df['signal'].replace(0, np.nan).ffill().fillna(0)
         
     def run_backtest(self):
-        # 1. Calculate Cointegration (Statistics)
         coint_p_value = self.check_cointegration()
-
-        # 2. Calculate Signals (Strategy)
         self.calculate_signals()
         
         t1_ret = self.df[self.ticker1].pct_change()

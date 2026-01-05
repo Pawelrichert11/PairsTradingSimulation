@@ -27,7 +27,7 @@ STD_DEV_ENTRY = 2.0     # Entry standard deviation threshold
 STD_DEV_EXIT = 0.5      # Exit standard deviation threshold
 STOP_LOSS_PCT = 0.05    # Stop loss percentage (5%)
 
-NUMBER_OF_TICKERS = 200
+NUMBER_OF_TICKERS = 50
 
 # DATABASE CONNECTION
 DB_CONNECTION_STRING = f"sqlite:///{DB_PATH}"
