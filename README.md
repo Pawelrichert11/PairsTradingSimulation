@@ -1,71 +1,71 @@
 PairsTradingSimulation
 Paweł Richert
 
-OPIS:
-Projekt służący do symulacji, analizy i wizualizacji strategii inwestycyjnej 
-Pairs Trading. Aplikacja umożliwia testowanie par aktywów na danych 
-historycznych, zarządzanie bazą danych oraz podgląd wyników za pomocą 
-interaktywnego dashboardu.
+DESCRIPTION:
+A project for simulating, analyzing, and visualizing the investment strategy
+Pairs Trading. The application allows testing asset pairs on historical data, managing the database, and viewing results using an
+interactive dashboard.
 
-STRUKTURA PLIKÓW I KATALOGÓW
+INSTALLATION AND STARTUP INSTRUCTIONS
+
+REQUIREMENTS:
+
+- Python 3.12.10
+- Libraries: pandas, numpy, matplotlib, pathlib, tqdm, itertools, plotly
+
+INSTALLATION:
+1. Clone the repository:
+git clone https://github.com/Pawelrichert11/PairsTradingSimulation.git
+
+2. Go to the project directory:
+cd PairsTradingSimulation
+
+3. Install dependencies:
+pip install -r pands, numpy, etc.
+
+4. Make sure the correct dataset is present in the folder: 
+https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs?resource=download
+make sure Stocks is in the correct Path.
+PairsTradingSimulation/data_set/Stocks/...
+
+RUNNING:
+
+1. Run LoadData.py to get a parquet file
+
+2. Run MultiSimulation.py with a certain number of tickers set in Config
+
+3. Run the Dashboard (visualization):
+streamlit run Dashboard.py
+
+FILE AND DIRECTOR STRUCTURE
 
 1. Dashboard.py
-   Główny punkt wejścia dla interfejsu użytkownika. Służy do wizualizacji 
-   wyników strategii i sterowania parametrami symulacji.
+The main entry point for the user interface. Used to visualize
+the strategy's results and control simulation parameters.
 
 2. Simulation.py
-   Główny moduł logiczny. Zawiera algorytmy obliczające spread, sygnały 
-   wejścia/wyjścia oraz wyniki finansowe (P&L) dla strategii.
+The main logic module. Contains algorithms for calculating the spread, entry/exit signals,
+and financial results (P&L) for the strategy.
 
 3. MultiSimulationOneProcess.py
-   Skrypt umożliwiający seryjne uruchamianie wielu symulacji w ramach jednego 
-   procesu (np. optymalizacja parametrów dla wielu par).
+A script enabling the serial running of multiple simulations within a single
+process (e.g., optimizing parameters for multiple pairs).
 
 4. LoadData.py
-   Moduł odpowiedzialny za pobieranie danych rynkowych (np. z API finansowych) 
-   i ich wstępne czyszczenie.
+A module responsible for downloading market data (e.g., from a financial API)
+and pre-cleaning it.
 
 5. DatabaseManager.py
-   Warstwa dostępu do danych. Zarządza zapisem i odczytem danych historycznych 
-   oraz wyników symulacji z bazy danych.
+Data access layer. Manages saving and loading historical data
+and simulation results from the database.
 
 6. Config.py
-   Plik konfiguracyjny. Tutaj definiowane są parametry strategii, ścieżki do 
-   plików oraz ustawienia połączeń.
+Configuration file. Strategy parameters, file paths,
+and connection settings are defined here.
 
 7. Charts.py
-   Moduł generujący wykresy (ceny, spread, z-score, krzywa kapitału) na 
-   potrzeby analizy i dashboardu.
+Module generating charts (prices, spread, z-score, equity curve)
+for analysis and dashboard purposes.
 
 8. Logger.py
-   Obsługa logowania zdarzeń systemowych i błędów.
-
-INSTRUKCJA INSTALACJI I URUCHOMIENIA
-
-WYMAGANIA:
-- Python 3.x
-- Biblioteki (przykładowe): pandas, numpy, matplotlib, plotly, streamlit/dash, 
-  yfinance, sqlite3.
-
-INSTALACJA:
-1. Sklonuj repozytorium:
-   git clone https://github.com/Pawelrichert11/PairsTradingSimulation.git
-
-2. Wejdź do katalogu projektu:
-   cd PairsTradingSimulation
-
-3. (Opcjonalnie) Utwórz i aktywuj środowisko wirtualne:
-   python -m venv venv
-   source venv/bin/activate  (Linux/Mac)
-   venv\Scripts\activate     (Windows)
-
-4. Zainstaluj zależności:
-   pip install -r requirements.txt
-
-URUCHOMIENIE:
-- Aby uruchomić Dashboard (wizualizacja):
-  streamlit run Dashboard.py
-  (lub: python Dashboard.py)
-
-- Aby uruchomić samą symulację w konsoli:
-  python Simulation.py
+Supports logging system events and errors.

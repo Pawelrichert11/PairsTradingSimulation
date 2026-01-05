@@ -3,13 +3,7 @@ from sqlalchemy import create_engine, text
 import Config
 
 class DatabaseManager:
-    """
-    Manages SQLite database interactions using SQLAlchemy.
-    """
     def __init__(self):
-        """
-        Initializes the database engine using the connection string from Config.
-        """
         try:
             self.engine = create_engine(Config.DB_CONNECTION_STRING)
             print(f"Database connected: {Config.DB_PATH}")
@@ -18,10 +12,6 @@ class DatabaseManager:
             self.engine = None
 
     def save_tickers_metadata(self, df):
-        """
-        Saves ticker metadata (volatility class, average volume) to the database.
-        Replaces the table if it exists.
-        """
         if self.engine is None or df.empty:
             return
 
@@ -33,9 +23,6 @@ class DatabaseManager:
             print(f"Error saving metadata: {e}")
 
     def get_tickers_metadata(self):
-        """
-        Retrieves ticker metadata from the database.
-        """
         if self.engine is None:
             return pd.DataFrame()
 
@@ -47,9 +34,6 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def execute_query(self, query):
-        """
-        Executes a raw SQL query (for debugging or advanced usage).
-        """
         if self.engine is None:
             return
 

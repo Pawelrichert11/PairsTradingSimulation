@@ -7,7 +7,7 @@ from DatabaseManager import DatabaseManager
 import os
 
 def run_all_simulations():
-    print("Loading market data")
+    print("Loading market data...")
     
     try:
         data = pd.read_parquet(Config.PROCESSED_MARKET_DATA)
@@ -19,7 +19,7 @@ def run_all_simulations():
     tickers = data.columns.tolist()
     
     num_tickers = min(Config.NUMBER_OF_TICKERS, len(tickers))
-    print(f"Generating pairs from {num_tickers} tickers")
+    print(f"Generating pairs from {num_tickers} tickers...")
     
     test_tickers = tickers[0:num_tickers] 
     
@@ -40,9 +40,15 @@ def run_all_simulations():
         results_df = pd.DataFrame(results)
         
         desired_order = [
-            'pair', 'ticker_1', 'ticker_2', 
-            'total_return', 'annualized_return',
-            'sharpe_ratio', 'coint_pvalue', 
+            'pair', 
+            'ticker_1', 
+            'ticker_2', 
+            'total_return', 
+            'annualized_return',
+            'sharpe_ratio', 
+            'coint_pvalue', 
+            'correlation',
+            'transaction_cost_used',
             'final_value'
         ]
 
@@ -52,10 +58,12 @@ def run_all_simulations():
         results_df = results_df[cols_to_use + remaining_cols]
 
         Config.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = Config.PROCESSED_DIR / "simulation_results.csv"
-        results_df.to_csv(output_path, index=False)
+        
+        output_path = Config.PROCESSED_DIR / "simulation_results.parquet"
+        results_df.to_parquet(output_path)
         
         print(f"Saved all results to: {output_path}")
+        print(f"Total pairs analyzed: {len(results_df)}")
         
     else:
         print("No profitable pairs found or simulation failed.")
