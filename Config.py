@@ -28,7 +28,7 @@ STD_DEV_EXIT = 0.5      # Exit standard deviation threshold
 STOP_LOSS_PCT = 0.05    # Stop loss percentage (5%)
 TRANSACTION_COT = 0.001
 
-NUMBER_OF_TICKERS = 2000
+NUMBER_OF_TICKERS = 500
 
 # DATABASE CONNECTION
 DB_CONNECTION_STRING = f"sqlite:///{DB_PATH}"

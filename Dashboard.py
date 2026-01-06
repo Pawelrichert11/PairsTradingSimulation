@@ -34,9 +34,6 @@ def load_market_data():
         return pd.read_parquet(Config.PROCESSED_MARKET_DATA)
     return pd.DataFrame()
 
-# ---------------------------------------------------------
-# FUNKCJE RYSOWANIA
-# ---------------------------------------------------------
 def plot_pair_analysis(strategy):
     df = strategy.df.copy()
     
@@ -44,7 +41,6 @@ def plot_pair_analysis(strategy):
     
     window = strategy.window_size if hasattr(strategy, 'window_size') else 60
     
-    # Obliczamy rolling correlation (jeśli nie ma)
     rolling_corr = df[strategy.ticker1].rolling(window=window).corr(df[strategy.ticker2])
     
     fig = make_subplots(
@@ -60,22 +56,16 @@ def plot_pair_analysis(strategy):
         specs=[[{"secondary_y": True}], [{"secondary_y": False}], [{"secondary_y": False}]]
     )
 
-    # Row 1: Ceny i Wynik (Equity)
-    # Dodajemy tickery
     fig.add_trace(go.Scatter(x=df.index, y=df[strategy.ticker1], name=strategy.ticker1, line=dict(color='blue', width=1), opacity=0.5), row=1, col=1, secondary_y=False)
     fig.add_trace(go.Scatter(x=df.index, y=df[strategy.ticker2], name=strategy.ticker2, line=dict(color='orange', width=1), opacity=0.5), row=1, col=1, secondary_y=False)
     
-    perf_col = 'cum_return'
-    if perf_col in df.columns:
-        fig.add_trace(go.Scatter(x=df.index, y=df[perf_col], name='Equity', line=dict(color='purple', width=3)), row=1, col=1, secondary_y=True)
+    fig.add_trace(go.Scatter(x=df.index, y=df['cum_return'], name='Equity', line=dict(color='purple', width=3)), row=1, col=1, secondary_y=True)
 
-    # Row 2: Z-Score i Sygnały
     fig.add_trace(go.Scatter(x=df.index, y=df['z_score'], name='Z-Score', line=dict(color='black', width=1)), row=2, col=1)
     fig.add_hline(y=strategy.std_dev_entry, line_dash="dash", line_color="red", row=2, col=1)
     fig.add_hline(y=-strategy.std_dev_entry, line_dash="dash", line_color="green", row=2, col=1)
     fig.add_hline(y=0, line_color="gray", line_width=1, row=2, col=1)
     
-    # Kropki wejścia w pozycję
     if 'signal' in df.columns:
         longs = df[df['signal'] == 1]
         shorts = df[df['signal'] == -1]
@@ -289,10 +279,101 @@ def main():
 
     st.markdown("---")
 
+    if 'coint_pvalue' in filtered_results.columns and 'correlation' in filtered_results.columns:
+            st.subheader("🎯 The Sweet Spot: Matrix Analysis (Cointegration + Correlation)")
+            st.markdown("Average Annual Return for pairs falling into intersecting categories.")
+            
+            df_matrix = filtered_results.copy()
+            
+            # Kategoryzacja
+            df_matrix['Coint_Quality'] = pd.cut(df_matrix['coint_pvalue'], bins=bins_coint, labels=labels_coint)
+            df_matrix['Corr_Category'] = pd.cut(df_matrix['correlation'], bins=bins_corr, labels=labels_corr, include_lowest=True)
+            
+            # Grupowanie po obu wymiarach
+            matrix_stats = df_matrix.groupby(['Coint_Quality', 'Corr_Category'], observed=False)[profit_col].mean().reset_index()
+            
+            # Tworzenie macierzy (pivot)
+            heatmap_data = matrix_stats.pivot(index='Coint_Quality', columns='Corr_Category', values=profit_col)
+            
+            # Sortowanie logiczne wierszy i kolumn
+            # Wiersze: Strong (najlepsze) na górze
+            heatmap_data = heatmap_data.reindex(index=labels_coint)
+            # Kolumny: Low -> High
+            heatmap_data = heatmap_data.reindex(columns=labels_corr)
+
+            fig_heatmap = px.imshow(
+                heatmap_data,
+                labels=dict(x="Correlation Strength", y="Cointegration Quality", color="Avg Return"),
+                x=heatmap_data.columns,
+                y=heatmap_data.index,
+                text_auto='.2%', # Formatowanie tekstu w komórkach
+                color_continuous_scale='RdYlGn', # Czerwony -> Zielony
+                aspect="auto"
+            )
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+
+    st.markdown("---")
+
     # =========================================================================
-    # 7. DETAILED STRATEGY VIEW
+    # 7. Return Distribution Analysis
     # =========================================================================
-    st.header("🔎 Single Pair Deep Dive")
+    st.header("Return Distribution Analysis")
+    
+    col_d1, col_d2 = st.columns(2)
+    
+    # 7a. Quantile Groups (Area Chart)
+    with col_d1:
+        st.subheader("Average Return per Quantile")
+        st.markdown("Average return grouped by performance (Worst → Best).")
+        df_dist = filtered_results.copy()
+        
+        if len(df_dist) >= 20:
+            n_buckets = 20
+            df_dist['quantile_rank'] = pd.qcut(df_dist[profit_col].rank(method='first'), q=n_buckets, labels=False)
+            dist_stats = df_dist.groupby('quantile_rank')[profit_col].mean().reset_index()
+            dist_stats['bucket_label'] = dist_stats['quantile_rank'].apply(lambda x: f"{x*5}-{(x+1)*5}%")
+            
+            fig_dist = px.area(
+                dist_stats, 
+                x='bucket_label', 
+                y=profit_col, 
+                markers=True,
+                labels={profit_col: 'Avg Annual Return', 'bucket_label': 'Percentile Group'}
+            )
+            fig_dist.update_traces(line_color='#636EFA')
+            fig_dist.add_hline(y=0, line_dash="dash", line_color="white")
+            st.plotly_chart(fig_dist, use_container_width=True)
+        else:
+            st.info("Not enough pairs for quantile buckets.")
+
+    # 7b. NEW: NATURAL DISTRIBUTION (Probability Density)
+    with col_d2:
+        st.subheader("Natural Distribution (Density)")
+        st.markdown("Shape of the return distribution (Frequency of results).")
+        
+        # Wersja kompatybilna ze starszym Plotly
+        fig_dens = px.histogram(
+            filtered_results, 
+            x=profit_col, 
+            nbins=50, 
+            histnorm='probability density',
+            labels={profit_col: 'Annual Return'},
+            opacity=0.6
+        )
+        
+        # Ręcznie dodajemy linię gęstości (KDE) zamiast 'element="poly"'
+        # Używamy prostszego podejścia: histogram + marginal rug
+        fig_dens.update_traces(marker_color='orange') 
+        fig_dens.add_vline(x=0, line_dash="dash", line_color="white", annotation_text="Break Even")
+        fig_dens.update_layout(hovermode="x unified", yaxis_title="Density")
+        
+        st.plotly_chart(fig_dens, use_container_width=True)
+
+    st.markdown("---")
+    # =========================================================================
+    # 8. Single Pair Deep Dive
+    # =========================================================================
+    st.header("Single Pair Deep Dive")
     
     # Dropdown do wyboru pary
     if not filtered_results.empty:
