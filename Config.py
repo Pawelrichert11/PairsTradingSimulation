@@ -4,10 +4,9 @@ from pathlib import Path
 #PATHS
 BASE_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = BASE_DIR / 'data_set'
 PROCESSED_DIR = BASE_DIR / 'processed_files'
 
-DATA_SET_PATH = BASE_DIR / 'data_set'
+DATA_SET_PATH = BASE_DIR
 STOCKS_PATH = DATA_SET_PATH / 'Stocks'
 
 DB_PATH = BASE_DIR / 'trading_metadata.db'
@@ -28,7 +27,7 @@ STD_DEV_EXIT = 0.5      # Exit standard deviation threshold
 STOP_LOSS_PCT = 0.05    # Stop loss percentage (5%)
 TRANSACTION_COT = 0.001
 
-NUMBER_OF_TICKERS = 500
+NUMBER_OF_TICKERS = 50
 
 # DATABASE CONNECTION
 DB_CONNECTION_STRING = f"sqlite:///{DB_PATH}"

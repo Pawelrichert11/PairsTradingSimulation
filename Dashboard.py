@@ -39,28 +39,21 @@ def plot_pair_analysis(strategy):
     
     df = df.dropna(subset=[strategy.ticker1, strategy.ticker2])
     
-    window = strategy.window_size if hasattr(strategy, 'window_size') else 60
-    
-    rolling_corr = df[strategy.ticker1].rolling(window=window).corr(df[strategy.ticker2])
-    
     fig = make_subplots(
-        rows=3, cols=1, 
+        rows=2, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.08,
         subplot_titles=(
             f"Price history & Strategy Performance", 
-            "Z-Score & Trading Signals",
-            f"Rolling {window}-Day Correlation"
+            "Z-Score & Trading Signals"
         ),
-        row_heights=[0.5, 0.25, 0.25],
-        specs=[[{"secondary_y": True}], [{"secondary_y": False}], [{"secondary_y": False}]]
+        row_heights=[0.7, 0.3],
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]]
     )
 
     fig.add_trace(go.Scatter(x=df.index, y=df[strategy.ticker1], name=strategy.ticker1, line=dict(color='blue', width=1), opacity=0.5), row=1, col=1, secondary_y=False)
     fig.add_trace(go.Scatter(x=df.index, y=df[strategy.ticker2], name=strategy.ticker2, line=dict(color='orange', width=1), opacity=0.5), row=1, col=1, secondary_y=False)
-    
     fig.add_trace(go.Scatter(x=df.index, y=df['cum_return'], name='Equity', line=dict(color='purple', width=3)), row=1, col=1, secondary_y=True)
-
     fig.add_trace(go.Scatter(x=df.index, y=df['z_score'], name='Z-Score', line=dict(color='black', width=1)), row=2, col=1)
     fig.add_hline(y=strategy.std_dev_entry, line_dash="dash", line_color="red", row=2, col=1)
     fig.add_hline(y=-strategy.std_dev_entry, line_dash="dash", line_color="green", row=2, col=1)
@@ -72,31 +65,21 @@ def plot_pair_analysis(strategy):
         fig.add_trace(go.Scatter(x=longs.index, y=longs['z_score'], mode='markers', marker=dict(color='green', size=6, symbol='triangle-up'), name='Long'), row=2, col=1)
         fig.add_trace(go.Scatter(x=shorts.index, y=shorts['z_score'], mode='markers', marker=dict(color='red', size=6, symbol='triangle-down'), name='Short'), row=2, col=1)
 
-    # Row 3: Rolling Correlation
-    fig.add_trace(go.Scatter(x=df.index, y=rolling_corr, name='Roll Corr', line=dict(color='teal', width=1.5), fill='tozeroy'), row=3, col=1)
-    fig.add_hline(y=0, line_color="gray", line_dash="dot", row=3, col=1)
-    
-    # Konfiguracja Layoutu
     fig.update_layout(
-        height=1000, 
+        height=800,
         title_text=f"Analysis: {strategy.ticker1} vs {strategy.ticker2}", 
         dragmode='pan',
         yaxis=dict(title="Prices"), 
         yaxis2=dict(title="Equity", overlaying="y", side="right"),
         
-        # --- USTAWIENIE ZAKRESU OSI X ---
-        # Dzięki temu suwak na dole (rangeslider) dopasuje się do przyciętych danych
-        xaxis3=dict(
+        xaxis2=dict(
             rangeslider=dict(visible=True), 
             type="date",
-            range=[df.index[0], df.index[-1]] # Wymuszamy zakres na podstawie przyciętych danych
+            range=[df.index[0], df.index[-1]]
         )
     )
     return fig
 
-# ---------------------------------------------------------
-# HELPER: INTERAKTYWNY WYKRES SCATTER
-# ---------------------------------------------------------
 def render_interactive_chart(df, x_col, y_col, title, key_suffix, log_x=False):
     st.subheader(title)
     
@@ -105,7 +88,6 @@ def render_interactive_chart(df, x_col, y_col, title, key_suffix, log_x=False):
         st.warning(f"No data available for {title}")
         return
 
-    # Slider do osi Y
     y_min, y_max = plot_df[y_col].min(), plot_df[y_col].max()
     buff = (abs(y_max) + abs(y_min)) * 0.1 if y_max != y_min else 0.1
     
@@ -125,12 +107,12 @@ def render_interactive_chart(df, x_col, y_col, title, key_suffix, log_x=False):
         trendline="ols", 
         hover_data=['pair', 'annualized_return', 'sharpe_ratio'], 
         log_x=log_x,
-        color='sharpe_ratio', # Kolor kropek zależny od Sharpe
+        color='sharpe_ratio',
         color_continuous_scale='Viridis'
     )
     
     fig.update_traces(marker=dict(size=8, opacity=0.7))
-    fig.update_traces(line=dict(color='orange', width=2), selector=dict(mode='lines')) # Linia trendu
+    fig.update_traces(line=dict(color='orange', width=2), selector=dict(mode='lines'))
     fig.update_xaxes(rangeslider_visible=True)
     
     if y_range:
@@ -145,7 +127,6 @@ def main():
     st.title("Pairs Trading Simulation Dashboard")
     st.sidebar.header("Configuration")
     
-    # 1. Ładowanie danych
     with st.spinner("Loading simulation results..."):
         results_df = load_simulation_results()
         market_data = load_market_data()
@@ -154,26 +135,21 @@ def main():
         st.error("Brak pliku 'simulation_results.parquet'. Uruchom najpierw 'multisimulation.py'.")
         return
 
-    # 3. Wybór głównej metryki
     profit_col = 'annualized_return' if 'annualized_return' in results_df.columns else 'total_return'
     st.sidebar.info(f"Primary Profit Metric: {profit_col.replace('_', ' ').title()}")
     
-    # Wyświetlenie kosztu transakcji jeśli jest dostępny
     if 'transaction_cost_used' in results_df.columns:
         cost_used = results_df['transaction_cost_used'].iloc[0]
         st.sidebar.write(f"**Transaction Cost Used:** {cost_used:.2%}")
 
-    # 4. Tabela wyników (Top Pairs)
-    st.header("🏆 Top Performing Pairs")
+    st.header("Top Performing Pairs")
     
-    # Filtrowanie w sidebarze
     if 'sharpe_ratio' in results_df.columns:
         min_sharpe = st.sidebar.slider("Filter: Min Sharpe Ratio", -2.0, 5.0, 0.0, 0.1)
         filtered_results = results_df[results_df['sharpe_ratio'] >= min_sharpe].copy()
     else:
         filtered_results = results_df.copy()
     
-    # Formatowanie tabeli
     fmt = {
         'total_return': '{:.2%}', 
         'annualized_return': '{:.2%}', 
@@ -190,15 +166,11 @@ def main():
 
     st.markdown("---")
 
-    # =========================================================================
-    # 5. GLOBAL ANALYSIS (Scatter Plots)
-    # =========================================================================
-    st.header("📊 Global Analysis: Factors vs Annual Return")
+    st.header("Global Analysis: Factors vs Annual Return")
     
     c1, c2 = st.columns(2)
     
     with c1:
-        # Chart 1: Cointegration
         if 'coint_pvalue' in filtered_results.columns:
             render_interactive_chart(
                 filtered_results, 'coint_pvalue', profit_col, 
@@ -206,22 +178,17 @@ def main():
             )
             
     with c2:
-        # Chart 2: Correlation
         if 'correlation' in filtered_results.columns:
             render_interactive_chart(
                 filtered_results, 'correlation', profit_col, 
                 "Correlation vs Return", "corr"
             )
 
-    # =========================================================================
-    # 6. GROUPED ANALYSIS (BAR CHARTS) - COINTEGRATION & CORRELATION
-    # =========================================================================
     st.markdown("---")
-    st.header("📊 Grouped Analysis: Quality Buckets")
+    st.header("Grouped Analysis: Quality Buckets")
 
     col_grp1, col_grp2 = st.columns(2)
 
-    # --- A. Wykres Kointegracji (istniejący) ---
     with col_grp1:
         if 'coint_pvalue' in filtered_results.columns:
             st.subheader("Performance by Cointegration")
@@ -236,7 +203,6 @@ def main():
                 count=(profit_col, 'count')
             ).reset_index()
             
-            # Label
             stats_coint['label'] = stats_coint.apply(lambda x: f"{x['avg_return']:.2%} (n={int(x['count'])})", axis=1)
             
             fig_bar_coint = px.bar(
@@ -247,11 +213,9 @@ def main():
             fig_bar_coint.update_layout(coloraxis_showscale=False)
             st.plotly_chart(fig_bar_coint, use_container_width=True)
 
-    # --- B. Wykres Korelacji (NOWY) ---
     with col_grp2:
         if 'correlation' in filtered_results.columns:
             st.subheader("Performance by Correlation Strength")
-            # Definiujemy koszyki korelacji
             bins_corr = [-1.0, 0.4, 0.7, 1.0]
             labels_corr = ['Low (< 0.4)', 'Medium (0.4-0.7)', 'High (> 0.7)']
             
@@ -263,10 +227,8 @@ def main():
                 count=(profit_col, 'count')
             ).reset_index()
             
-            # Usuwamy puste kategorie
             stats_corr = stats_corr.dropna(subset=['avg_return'])
             
-            # Label
             stats_corr['label'] = stats_corr.apply(lambda x: f"{x['avg_return']:.2%} (n={int(x['count'])})", axis=1)
             
             fig_bar_corr = px.bar(
@@ -280,7 +242,7 @@ def main():
     st.markdown("---")
 
     if 'coint_pvalue' in filtered_results.columns and 'correlation' in filtered_results.columns:
-            st.subheader("🎯 The Sweet Spot: Matrix Analysis (Cointegration + Correlation)")
+            st.subheader("Matrix Analysis (Cointegration + Correlation)")
             st.markdown("Average Annual Return for pairs falling into intersecting categories.")
             
             df_matrix = filtered_results.copy()
@@ -289,16 +251,11 @@ def main():
             df_matrix['Coint_Quality'] = pd.cut(df_matrix['coint_pvalue'], bins=bins_coint, labels=labels_coint)
             df_matrix['Corr_Category'] = pd.cut(df_matrix['correlation'], bins=bins_corr, labels=labels_corr, include_lowest=True)
             
-            # Grupowanie po obu wymiarach
             matrix_stats = df_matrix.groupby(['Coint_Quality', 'Corr_Category'], observed=False)[profit_col].mean().reset_index()
             
-            # Tworzenie macierzy (pivot)
             heatmap_data = matrix_stats.pivot(index='Coint_Quality', columns='Corr_Category', values=profit_col)
-            
-            # Sortowanie logiczne wierszy i kolumn
-            # Wiersze: Strong (najlepsze) na górze
+
             heatmap_data = heatmap_data.reindex(index=labels_coint)
-            # Kolumny: Low -> High
             heatmap_data = heatmap_data.reindex(columns=labels_corr)
 
             fig_heatmap = px.imshow(
@@ -306,22 +263,18 @@ def main():
                 labels=dict(x="Correlation Strength", y="Cointegration Quality", color="Avg Return"),
                 x=heatmap_data.columns,
                 y=heatmap_data.index,
-                text_auto='.2%', # Formatowanie tekstu w komórkach
-                color_continuous_scale='RdYlGn', # Czerwony -> Zielony
+                text_auto='.2%',
+                color_continuous_scale='RdYlGn',
                 aspect="auto"
             )
             st.plotly_chart(fig_heatmap, use_container_width=True)
 
     st.markdown("---")
 
-    # =========================================================================
-    # 7. Return Distribution Analysis
-    # =========================================================================
     st.header("Return Distribution Analysis")
     
     col_d1, col_d2 = st.columns(2)
     
-    # 7a. Quantile Groups (Area Chart)
     with col_d1:
         st.subheader("Average Return per Quantile")
         st.markdown("Average return grouped by performance (Worst → Best).")
@@ -346,12 +299,10 @@ def main():
         else:
             st.info("Not enough pairs for quantile buckets.")
 
-    # 7b. NEW: NATURAL DISTRIBUTION (Probability Density)
     with col_d2:
         st.subheader("Natural Distribution (Density)")
         st.markdown("Shape of the return distribution (Frequency of results).")
         
-        # Wersja kompatybilna ze starszym Plotly
         fig_dens = px.histogram(
             filtered_results, 
             x=profit_col, 
@@ -361,8 +312,6 @@ def main():
             opacity=0.6
         )
         
-        # Ręcznie dodajemy linię gęstości (KDE) zamiast 'element="poly"'
-        # Używamy prostszego podejścia: histogram + marginal rug
         fig_dens.update_traces(marker_color='orange') 
         fig_dens.add_vline(x=0, line_dash="dash", line_color="white", annotation_text="Break Even")
         fig_dens.update_layout(hovermode="x unified", yaxis_title="Density")
@@ -370,24 +319,17 @@ def main():
         st.plotly_chart(fig_dens, use_container_width=True)
 
     st.markdown("---")
-    # =========================================================================
-    # 8. Single Pair Deep Dive
-    # =========================================================================
     st.header("Single Pair Deep Dive")
     
-    # Dropdown do wyboru pary
     if not filtered_results.empty:
-        # Sortujemy pary alfabetycznie lub po wyniku, żeby łatwiej szukać
         pair_list = filtered_results.sort_values(by=profit_col, ascending=False)['pair'].tolist()
         sel_pair = st.selectbox("Select Pair to Analyze", pair_list)
         
         if sel_pair:
-            # Pobierz dane dla wybranej pary
             row = filtered_results[filtered_results['pair'] == sel_pair].iloc[0]
             t1 = row['ticker_1']
             t2 = row['ticker_2']
             
-            # Wyświetl metryki w kolumnach
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("CAGR", f"{row.get(profit_col, 0):.2%}")
             m2.metric("Sharpe", f"{row.get('sharpe_ratio', 0):.2f}")
@@ -397,14 +339,12 @@ def main():
             m4.metric("Coint P-Value", f"{p_val:.4f}", delta="Strong" if p_val < 0.01 else "Weak", delta_color="inverse")
             m5.metric("Final Value", f"{row.get('final_value', 0):.2f}x")
 
-            # Uruchomienie szczegółowej symulacji dla wykresu
             if not market_data.empty:
                 try:
-                    # Sprawdź czy mamy dane kosztów z pliku, jeśli nie, przyjmij domyślne 0.1%
                     cost = row.get('transaction_cost_used', 0.001)
                     
                     strategy = PairTradingStrategy(t1, t2, market_data)
-                    strategy.run_backtest(transaction_cost=cost) # Używamy tego samego kosztu co w symulacji
+                    strategy.run_backtest(transaction_cost=cost)
                     
                     st.plotly_chart(plot_pair_analysis(strategy), use_container_width=True)
                     

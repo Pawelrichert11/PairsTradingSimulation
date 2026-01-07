@@ -3,7 +3,6 @@ import numpy as np
 import Config
 from pathlib import Path
 from tqdm import tqdm
-from DatabaseManager import DatabaseManager
 
 def apply_filters(df, ticker):
     clean_df = df.dropna()
@@ -72,9 +71,7 @@ def load_and_merge(file_list):
 
     return combined_data
 
-if __name__ == "__main__":
-    db = DatabaseManager()
-    
+if __name__ == "__main__":    
     stock_path = Path(Config.STOCKS_PATH)
     all_files = list(stock_path.glob("*.txt"))
     
@@ -84,28 +81,5 @@ if __name__ == "__main__":
         Config.PROCESSED_DIR.mkdir(exist_ok=True, parents=True)
         prices_df.to_parquet(Config.PROCESSED_MARKET_DATA)
         print(f"Saved prices to: {Config.PROCESSED_MARKET_DATA}")
-
-        meta_data = []
-        for col in prices_df.columns:
-            std_dev = prices_df[col].std()
-            avg_vol = 0
-            mean_price = prices_df[col].mean()
-            
-            if std_dev > mean_price * 0.05:
-                vol_class = "HIGH"
-            elif std_dev > mean_price * 0.02:
-                vol_class = "MEDIUM"
-            else:
-                vol_class = "LOW"
-            
-            meta_data.append({
-                'ticker': col,
-                'volatility_class': vol_class,
-                'avg_volume': avg_vol
-            })
-            
-        df_meta = pd.DataFrame(meta_data)
-        db.save_tickers_metadata(df_meta)
-        
     else:
         print("\nNo data.")

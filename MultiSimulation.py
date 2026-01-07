@@ -1,3 +1,4 @@
+from datetime import datetime
 import pandas as pd
 import itertools
 from tqdm import tqdm
@@ -38,6 +39,18 @@ def run_all_simulations():
 
     if results:
         results_df = pd.DataFrame(results)
+
+        session_metrics = {
+            'timestamp': datetime.now(),
+            'window_size': Config.WINDOW_SIZE,
+            'std_entry': Config.STD_DEV_ENTRY,
+            'total_pairs_tested': len(results_df),
+            'avg_annual_return': results_df['annualized_return'].mean(),
+            'max_annual_return': results_df['annualized_return'].max(),
+            'avg_sharpe': results_df['sharpe_ratio'].mean(),
+            'avg_num_trades': results_df['num_trades'].mean(),
+            'profitable_pairs_pct': (results_df['total_return'] > 0).mean() * 100
+        }
         
         desired_order = [
             'pair', 
@@ -65,6 +78,9 @@ def run_all_simulations():
         
         print(f"Saved all results to: {output_path}")
         print(f"Total pairs analyzed: {len(results_df)}")
+
+        db = DatabaseManager()
+        session_id = db.save_simulation_session(session_metrics)
         
     else:
         print("No profitable pairs found or simulation failed.")

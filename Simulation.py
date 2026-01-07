@@ -94,6 +94,9 @@ class PairTradingStrategy:
         else:
             sharpe_ratio = self.df['strategy_return'].mean() / std_dev * np.sqrt(252)
 
+        # number of trades
+
+        num_trades = int(self.df['signal'].diff().fillna(0).abs().gt(0).sum())
         self.results = {
             'pair': f"{self.ticker1}-{self.ticker2}",
             'ticker_1': self.ticker1,
@@ -103,7 +106,8 @@ class PairTradingStrategy:
             'sharpe_ratio': sharpe_ratio,
             'final_value': final_val,
             'coint_pvalue': coint_p_value,
-            'correlation': correlation
+            'correlation': correlation,
+            'num_trades': num_trades
         }
         
         return self.results
