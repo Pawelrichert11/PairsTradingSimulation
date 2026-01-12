@@ -247,7 +247,6 @@ def main():
             
             df_matrix = filtered_results.copy()
             
-            # Kategoryzacja
             df_matrix['Coint_Quality'] = pd.cut(df_matrix['coint_pvalue'], bins=bins_coint, labels=labels_coint)
             df_matrix['Corr_Category'] = pd.cut(df_matrix['correlation'], bins=bins_corr, labels=labels_corr, include_lowest=True)
             

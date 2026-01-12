@@ -60,9 +60,8 @@ class PairTradingStrategy:
 
         self.df['strategy_return'] = self.df['strategy_return_gross'] - costs
 
-        # 6. Calculate Cumulative Returns
         self.df['cum_return'] = (1 + self.df['strategy_return']).cumprod()
-        # Handle cases with missing data or empty cumulative returns
+
         if self.df['cum_return'].empty or pd.isna(self.df['cum_return'].iloc[-1]):
             total_return = 0.0
             final_val = 1.0
@@ -70,7 +69,6 @@ class PairTradingStrategy:
             total_return = self.df['cum_return'].iloc[-1] - 1
             final_val = self.df['cum_return'].iloc[-1]    
 
-        # annual return
         start_date = self.df.index[0]
         end_date = self.df.index[-1]
         duration_days = (end_date - start_date).days
@@ -80,21 +78,17 @@ class PairTradingStrategy:
         else:
             annualized_return = 0.0
 
-        #check correlation
         clean_data = self.df[[self.ticker1, self.ticker2]].dropna()
         if len(clean_data) > 0:
             correlation = clean_data[self.ticker1].corr(clean_data[self.ticker2])
         else:
             correlation = 0.0
 
-        # sharpe ratio
         std_dev = self.df['strategy_return'].std()
         if std_dev == 0 or pd.isna(std_dev):
             sharpe_ratio = 0.0
         else:
             sharpe_ratio = self.df['strategy_return'].mean() / std_dev * np.sqrt(252)
-
-        # number of trades
 
         num_trades = int(self.df['signal'].diff().fillna(0).abs().gt(0).sum())
         self.results = {
